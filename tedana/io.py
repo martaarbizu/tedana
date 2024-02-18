@@ -4,6 +4,7 @@ Other functions in the module help write outputs which require multiple
 data sources, assist in writing per-echo verbose outputs, or act as helper
 functions for any of the above.
 """
+
 import json
 import logging
 import os
@@ -551,7 +552,8 @@ def write_split_ts(data, mmix, mask, comptable, io_generator, echo=0):
         Output directory.
     echo : :obj: `int`, optional
         Echo number to generate filenames, used by some verbose
-        functions. Default 0.
+        functions. Currently this is only not 0 when
+        io_generator.verbose==True. Default 0.
 
     Returns
     -------
@@ -561,13 +563,23 @@ def write_split_ts(data, mmix, mask, comptable, io_generator, echo=0):
     Generated Files
     ---------------
 
-    ============================    ============================================
-    Filename                        Content
-    ============================    ============================================
-    [prefix]Accepted_bold.nii.gz    High-Kappa time series.
-    [prefix]Rejected_bold.nii.gz    Low-Kappa time series.
-    [prefix]Denoised_bold.nii.gz    Denoised time series.
-    ============================    ============================================
+    =====================================    ============================================
+    Filename                                 Content
+    =====================================    ============================================
+    desc-optcomDenoised_bold.nii.gz          Denoised time series.
+
+    if io_generator.verbose==True
+    desc-optcomAccepted_bold.nii.gz          High-Kappa time series.
+    desc-optcomRejected_bold.nii.gz          Low-Kappa time series.
+
+    if echo>0
+    echo-[echo]_desc-Accepted_bold.nii.gz    High-Kappa timeseries for echo
+                                             number ``echo``.
+    echo-[echo]_desc-Rejected_bold.nii.gz    Low-Kappa timeseries for echo
+                                             number ``echo``.
+    echo-[echo]_desc-Denoised_bold.nii.gz    Denoised timeseries for echo
+                                             number ``echo``.
+    =====================================    ============================================
     """
     acc = comptable[comptable.classification == "accepted"].index.values
     rej = comptable[comptable.classification == "rejected"].index.values
@@ -624,19 +636,20 @@ def writeresults(ts, mask, comptable, mmix, io_generator):
     Generated Files
     ---------------
 
-    =========================================    =====================================
+    =========================================    ===========================================
     Filename                                     Content
-    =========================================    =====================================
-    desc-optcomAccepted_bold.nii.gz              High-Kappa time series.
-    desc-optcomRejected_bold.nii.gz              Low-Kappa time series.
+    =========================================    ===========================================
     desc-optcomDenoised_bold.nii.gz              Denoised time series.
+
+    desc-optcomAccepted_bold.nii.gz              High-Kappa time series. (only with verbose)
+    desc-optcomRejected_bold.nii.gz              Low-Kappa time series. (only with verbose)
     desc-ICA_components.nii.gz                   Spatial component maps for all
                                                  components.
     desc-ICAAccepted_components.nii.gz           Spatial component maps for accepted
                                                  components.
     desc-ICAAccepted_stat-z_components.nii.gz    Z-normalized spatial component maps
                                                  for accepted components.
-    =========================================    =====================================
+    =========================================    ===========================================
     """
     acc = comptable[comptable.classification == "accepted"].index.values
     write_split_ts(ts, mmix, mask, comptable, io_generator)
@@ -887,6 +900,10 @@ def str_to_component_list(s: str) -> List[int]:
     ------
     ValueError, if the string cannot be split by an allowed delimeter
     """
+    if not s:
+        LGR.warning("Component string is empty ")
+        return []
+
     # Strip off newline at end in case we've been given a one-line file
     if s[-1] == "\n":
         s = s[:-1]
@@ -936,7 +953,12 @@ def fname_to_component_list(fname: str) -> List[int]:
     csv file cannot be interpreted.
     """
     if fname[-3:] == "csv":
-        contents = pd.read_csv(fname)
+        try:
+            contents = pd.read_csv(fname)
+        except Exception:
+            LGR.warning(f"{fname} is empty ")
+            return []
+
         columns = contents.columns
         if len(columns) == 2 and "0" in columns:
             return contents["0"].tolist()
@@ -947,6 +969,8 @@ def fname_to_component_list(fname: str) -> List[int]:
 
     with open(fname) as fp:
         contents = fp.read()
+        if len(contents) == 0:
+            LGR.warning(f"{fname} is empty ")
         return str_to_component_list(contents)
 
 
